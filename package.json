@@ -1,0 +1,12 @@
+{
+  "name": "evo-dashboard",
+  "version": "1.0.0",
+  "description": "Dashboard EVO Equinoxes — proxy Axonaut + interface",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
