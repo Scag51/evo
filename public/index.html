@@ -353,7 +353,7 @@ async function loadClient(clientId, clientName) {
 
     // Enrichir tickets
     const enriched = relTickets.map(t => {
-      const h = (tts[t.id]||[]).reduce((s,tt)=>s+(tt.hours||0),0);
+      const h = (tts[t.id]||[]).reduce((s,tt)=>s+parseFloat(tt.hours||0),0);
       const prj = allPrj.find(p=>p.id===t.project_id);
       return {...t, hours:h, projectName: prj?prj.name:''};
     }).sort((a,b)=>new Date(b.creation_date)-new Date(a.creation_date));
