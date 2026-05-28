@@ -362,6 +362,87 @@ function getClientData(companyId) {
   return { company, contracts, tickets, evoPrj, assistPrj, soldH, usedH, remH, pct, evoTix };
 }
 
+// ── FETCH CLIENT DEPUIS AXONAUT (fallback si SQLite vide) ──
+async function fetchClientFromAxonaut(companyId) {
+  // Infos société
+  const { body: coBody } = await axoGet('/api/v2/companies/' + companyId, 1);
+  const company = Array.isArray(coBody) ? coBody[0] : coBody;
+
+  // Factures → contrats EVO
+  const invoices = await axoAll('/api/v2/companies/' + companyId + '/invoices');
+  const contracts = [];
+  for (const inv of invoices) {
+    for (const ln of (inv.invoice_lines || [])) {
+      const pid = Number(ln.product_id);
+      if (!EVO_IDS.includes(pid)) continue;
+      contracts.push({
+        label: EVO_LABELS[pid],
+        hours: EVO_HOURS[pid] * (ln.quantity || 1),
+        qty: ln.quantity || 1,
+        invoice_num: inv.number || String(inv.id),
+        invoice_date: inv.date || '',
+        product_id: pid,
+      });
+    }
+  }
+
+  // Projets EVO/Assistance
+  const allProjects = await axoAll('/api/v2/projects');
+  const clientProjects = allProjects.filter(p => String(p.company_id) === String(companyId));
+  const evoPrj    = clientProjects.filter(p => (p.name||'').toLowerCase().includes('evo'));
+  const assistPrj = clientProjects.filter(p => (p.name||'').toLowerCase().includes('assistance'));
+  const allPrj    = [...evoPrj, ...assistPrj];
+  const prjIds    = new Set(allPrj.map(p => p.id));
+
+  // Tickets
+  const allTickets = await axoAll('/api/v2/tickets?company_id=' + companyId);
+  const relTickets = allTickets.filter(t => t.project_id && prjIds.has(t.project_id));
+
+  // Timetrackings
+  const tickets = [];
+  for (let i = 0; i < relTickets.length; i += 5) {
+    const batch = relTickets.slice(i, i + 5);
+    const results = await Promise.all(batch.map(async t => {
+      try {
+        const tts = await axoAll('/api/v2/tickets/' + t.id + '/timetrackings');
+        const hours = tts.reduce((s, tt) => s + parseFloat(tt.hours || 0), 0);
+        const prj = allPrj.find(p => p.id === t.project_id);
+        // Sauvegarder en SQLite
+        db.prepare(`INSERT INTO tickets (id,company_id,project_id,project_name,title,reference,is_closed,creation_date,hours)
+          VALUES (?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(id) DO UPDATE SET hours=excluded.hours,is_closed=excluded.is_closed`)
+          .run(t.id, companyId, t.project_id, prj?.name||'', t.title||'', t.reference||'',
+               t.is_closed?1:0, t.creation_date||'', hours);
+        return { ...t, hours, project_name: prj?.name || '', is_closed: t.is_closed ? 1 : 0 };
+      } catch(e) {
+        return { ...t, hours: 0, project_name: '' };
+      }
+    }));
+    tickets.push(...results);
+  }
+
+  // Sauvegarder contrats et société en SQLite
+  const now = Math.floor(Date.now()/1000);
+  db.prepare(`INSERT INTO companies (id,name,email,city,updated_at) VALUES (?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET name=excluded.name,email=excluded.email,city=excluded.city,updated_at=excluded.updated_at`)
+    .run(companyId, company?.name||'', company?.email||'', company?.address_city||'', now);
+
+  db.prepare('DELETE FROM contracts WHERE company_id=?').run(companyId);
+  const insertCtr = db.prepare(`INSERT INTO contracts (company_id,invoice_num,invoice_date,product_id,label,hours,qty) VALUES (?,?,?,?,?,?,?)`);
+  db.transaction(list => { for(const c of list) insertCtr.run(companyId,c.invoice_num,c.invoice_date,c.product_id,c.label,c.hours,c.qty); })(contracts);
+
+  const soldH  = contracts.reduce((s,c)=>s+c.hours, 0);
+  const evoTix = tickets.filter(t=>(t.project_name||'').toLowerCase().includes('evo'));
+  const usedH  = evoTix.reduce((s,t)=>s+parseFloat(t.hours||0), 0);
+  const remH   = Math.max(0, soldH - usedH);
+  const pct    = soldH > 0 ? Math.min(100, Math.round((usedH/soldH)*100)) : 0;
+
+  return {
+    company: { id: companyId, name: company?.name||'', email: company?.email||'', city: company?.address_city||'' },
+    contracts, tickets, evoPrj, assistPrj, soldH, usedH, remH, pct, evoTix
+  };
+}
+
 // ── SERVEUR HTTP ─────────────────────────────────────────
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -485,24 +566,57 @@ const server = http.createServer(async (req, res) => {
       .get(match[1], Math.floor(Date.now() / 1000));
     if (!session) return json(res, 401, { error: 'Session expirée' });
 
-    const data = getClientData(session.company_id);
+    let data = getClientData(session.company_id);
+    if (data.tickets.length === 0 && data.contracts.length === 0) {
+      try { data = await fetchClientFromAxonaut(session.company_id); } catch(e) {}
+    }
     return json(res, 200, { ...data, links: LINKS });
   }
 
-  // GET /api/admin/search?q= — recherche client (admin)
+  // GET /api/admin/search?q= — recherche client (Axonaut direct + SQLite fallback)
   if (method === 'GET' && url === '/api/admin/search') {
-    if (!checkAdminSession(req)) return json(res, 401, { error: 'Non authentifié' });
-    const q = (query.q || '').toLowerCase();
+    const q = (query.q || '').trim();
+    if (!q) return json(res, 200, []);
+
+    // Essai Axonaut direct d'abord
+    try {
+      const { status, body } = await axoGet('/api/v2/companies?search=' + encodeURIComponent(q), 1);
+      if (status === 200 && Array.isArray(body)) {
+        const results = body.slice(0, 10).map(c => ({
+          id: c.id, name: c.name || '', email: c.email || '', city: c.address_city || ''
+        }));
+        // Mettre à jour SQLite en arrière-plan
+        const upsert = db.prepare(`INSERT INTO companies (id,name,email,city,updated_at) VALUES (?,?,?,?,?)
+          ON CONFLICT(id) DO UPDATE SET name=excluded.name,email=excluded.email,city=excluded.city`);
+        const now = Math.floor(Date.now()/1000);
+        db.transaction(list => { for(const c of results) upsert.run(c.id,c.name,c.email,c.city,now); })(results);
+        return json(res, 200, results);
+      }
+    } catch(e) {
+      console.error('[SEARCH] Axonaut error, fallback SQLite:', e.message);
+    }
+
+    // Fallback SQLite
     const results = db.prepare("SELECT id,name,email,city FROM companies WHERE lower(name) LIKE ? LIMIT 10")
-      .all(`%${q}%`);
+      .all(`%${q.toLowerCase()}%`);
     return json(res, 200, results);
   }
 
-  // GET /api/admin/client/:id — détail client (admin)
+  // GET /api/admin/client/:id — détail client (SQLite + fallback Axonaut)
   if (method === 'GET' && url.startsWith('/api/admin/client/')) {
     if (!checkAdminSession(req)) return json(res, 401, { error: 'Non authentifié' });
     const id = parseInt(url.split('/').pop());
-    return json(res, 200, getClientData(id));
+    const data = getClientData(id);
+    // Si pas de tickets ni contrats en SQLite, fetch depuis Axonaut
+    if (data.tickets.length === 0 && data.contracts.length === 0) {
+      try {
+        const fresh = await fetchClientFromAxonaut(id);
+        return json(res, 200, fresh);
+      } catch(e) {
+        console.error('[DETAIL] Axonaut fallback error:', e.message);
+      }
+    }
+    return json(res, 200, data);
   }
 
   // GET /api/admin/alerts — clients dépassés 100%
