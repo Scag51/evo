@@ -83,7 +83,7 @@ nav{position:sticky;top:0;z-index:200;background:rgba(28,29,51,0.97);backdrop-fi
 .result-item:hover .result-arrow{color:var(--green);transform:translateX(3px)}
 .result-empty{padding:1.25rem;text-align:center;font-family:'Roboto Condensed',sans-serif;font-size:.85rem;color:var(--muted)}
 /* ALERTS */
-.alerts-section{width:100%;max-width:900px}
+.alerts-section{width:100%;max-width:520px}
 .alerts-title{font-family:'Roboto Condensed',sans-serif;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--crit);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem}
 .alerts-title::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--crit);animation:pulse 1.5s infinite}
 .alert-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem}
@@ -224,6 +224,16 @@ table.tix tr:hover td{background:rgba(255,255,255,.025);color:#fff}
 .offer-card .o-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;font-family:'Raleway',sans-serif;font-weight:700;font-size:.6rem;padding:.15rem .55rem;border-radius:3px;white-space:nowrap;text-transform:uppercase}
 .offer-desc{font-family:'Roboto Condensed',sans-serif;font-size:.78rem;color:var(--muted);line-height:1.55;margin-bottom:1.5rem}
 
+/* SYNC SCREEN */
+.sync-screen{display:flex;flex-direction:column;align-items:center;gap:1.25rem;padding:2rem;max-width:460px;width:100%;text-align:center}
+.sync-logo{font-family:'Raleway',sans-serif;font-weight:800;font-size:1.5rem;color:#fff;margin-bottom:.5rem}
+.sync-logo em{font-style:normal;color:var(--green)}
+.sync-title{font-family:'Raleway',sans-serif;font-weight:700;font-size:1.25rem;color:#fff}
+.sync-step{font-family:'Roboto Condensed',sans-serif;font-size:.88rem;color:var(--sub);min-height:1.4em}
+.sync-progress-wrap{width:100%;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
+.sync-progress-bar{height:100%;background:linear-gradient(90deg,#2dd55b,var(--green));border-radius:3px;transition:width .5s ease}
+.sync-pct{font-family:'Raleway',sans-serif;font-weight:800;font-size:2rem;color:var(--green)}
+.sync-detail{font-family:'Roboto Condensed',sans-serif;font-size:.75rem;color:var(--muted)}
 /* LOADING */
 .loading-block{display:flex;flex-direction:column;align-items:center;gap:1rem;padding:4rem;color:var(--sub)}
 .loading-step{font-family:'Roboto Condensed',sans-serif;font-size:.83rem;color:var(--muted)}
@@ -235,6 +245,22 @@ table.tix tr:hover td{background:rgba(255,255,255,.025);color:#fff}
   <div class="nav-logo" onclick="goHome()">Equinox<em>es</em><span class="nav-tag">EVO</span></div>
   <div class="nav-right" id="navRight"></div>
 </nav>
+
+<!-- PAGE : SYNC EN COURS -->
+<div class="page" id="pageSyncing">
+  <div class="page-center">
+    <div class="sync-screen">
+      <div class="sync-logo">Equinox<em>es</em></div>
+      <div class="sync-title">Synchronisation en cours</div>
+      <div class="sync-step" id="syncStepTxt">Démarrage…</div>
+      <div class="sync-progress-wrap">
+        <div class="sync-progress-bar" id="syncProgressBar" style="width:0%"></div>
+      </div>
+      <div class="sync-pct" id="syncPctTxt">0%</div>
+      <div class="sync-detail" id="syncDetailTxt"></div>
+    </div>
+  </div>
+</div>
 
 <!-- PAGE : LOGIN ADMIN -->
 <div class="page" id="pageAdminLogin">
@@ -264,12 +290,6 @@ table.tix tr:hover td{background:rgba(255,255,255,.025);color:#fff}
       <button class="btn-nav" onclick="triggerSync()" id="syncBtn">↺ Sync</button>
     </div>
 
-    <!-- Alertes -->
-    <div class="alerts-section" id="alertsSection" style="display:none">
-      <div class="alerts-title">Contrats épuisés</div>
-      <div class="alert-grid" id="alertGrid"></div>
-    </div>
-
     <!-- Recherche -->
     <div class="search-hero">
       <div class="eyebrow" style="margin-bottom:1rem">Dashboard interne</div>
@@ -282,6 +302,13 @@ table.tix tr:hover td{background:rgba(255,255,255,.025);color:#fff}
       <div class="search-spinner" id="adminSpinner"><div class="spinner-sm"></div></div>
     </div>
     <div id="searchResults"></div>
+
+    <!-- Alertes sous la recherche -->
+    <div class="alerts-section" id="alertsSection" style="display:none">
+      <div class="alerts-title">Contrats épuisés</div>
+      <div class="alert-grid" id="alertGrid"></div>
+      <div id="alertsNote" style="font-family:Roboto Condensed,sans-serif;font-size:.72rem;color:var(--muted);margin-top:.6rem;text-align:center"></div>
+    </div>
   </div>
 </div>
 
@@ -451,18 +478,60 @@ function goHome() {
 async function init() {
   const { data } = await api('GET', '/api/auth/check');
   if (data.admin) {
-    showPage('pageAdminHome');
-    loadAdminHome();
+    // Vérifier si sync en cours
+    const { data: syncData } = await api('GET', '/api/admin/sync-status');
+    if (syncData.running || syncData.counts.companies === 0) {
+      showPage('pageSyncing');
+      waitForSync(() => {
+        showPage('pageAdminHome');
+        loadAdminHome();
+      });
+    } else {
+      showPage('pageAdminHome');
+      loadAdminHome();
+    }
   } else {
     // Vérifier session client
     const { status, data: me } = await api('GET', '/api/client/me');
     if (status === 200 && me.company) {
       showPage('pageClientDetail');
-      renderClientDetail(me);
+      renderDetail(me, 'clientDetail', false);
     } else {
       showPage('pageClientSearch');
     }
   }
+}
+
+async function waitForSync(onDone) {
+  const bar  = document.getElementById('syncProgressBar');
+  const pct  = document.getElementById('syncPctTxt');
+  const step = document.getElementById('syncStepTxt');
+  const det  = document.getElementById('syncDetailTxt');
+
+  const poll = async () => {
+    try {
+      const { data } = await api('GET', '/api/admin/sync-progress');
+      if (bar)  bar.style.width  = (data.pct || 0) + '%';
+      if (pct)  pct.textContent  = (data.pct || 0) + '%';
+      if (step) step.textContent = data.step || '…';
+      if (det && data.total > 0) {
+        det.textContent = data.done + ' / ' + data.total + ' tickets traités';
+      }
+
+      if (!data.running && data.pct >= 100) {
+        // Sync terminée
+        if (bar)  bar.style.width = '100%';
+        if (pct)  pct.textContent = '100%';
+        if (step) step.textContent = 'Synchronisation terminée ✓';
+        setTimeout(onDone, 600);
+      } else {
+        setTimeout(poll, 1500);
+      }
+    } catch(e) {
+      setTimeout(poll, 3000);
+    }
+  };
+  poll();
 }
 
 // ═══════════════════════════════════════════
@@ -522,11 +591,24 @@ async function triggerSync() {
 }
 
 async function loadAlerts() {
-  const { data } = await api('GET', '/api/admin/alerts');
   const section = document.getElementById('alertsSection');
-  if (!data.length) { section.style.display='none'; return; }
+  const grid = document.getElementById('alertGrid');
+  const note = document.getElementById('alertsNote');
+
+  // Afficher un état de chargement
   section.style.display = 'block';
-  document.getElementById('alertGrid').innerHTML = data.map(a => `
+  grid.innerHTML = '<div style="font-family:Roboto Condensed,sans-serif;font-size:.8rem;color:var(--muted);padding:.5rem 0">Analyse des contrats…</div>';
+
+  const { data } = await api('GET', '/api/admin/alerts');
+  const alerts = data.alerts || [];
+
+  if (!alerts.length) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  grid.innerHTML = alerts.map(a => `
     <div class="alert-card" onclick="loadAdminClient(${a.id})">
       <div class="alert-name">${a.name}</div>
       <div class="alert-detail">
@@ -534,6 +616,12 @@ async function loadAlerts() {
         · <strong>+${fmtH(a.overH)} dépassé</strong>
       </div>
     </div>`).join('');
+
+  if (note) {
+    note.textContent = data.total > 0
+      ? `${alerts.length} client(s) épuisé(s) sur ${data.total} avec un contrat EVO`
+      : '';
+  }
 }
 
 // ═══════════════════════════════════════════
