@@ -1,10 +1,14 @@
 {
   "name": "evo-dashboard",
-  "version": "1.0.0",
-  "description": "Dashboard EVO Equinoxes — proxy Axonaut + interface",
+  "version": "2.0.0",
+  "description": "Dashboard EVO Equinoxes — admin + client + SQLite + OTP",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "nodemailer": "^6.9.13"
   },
   "engines": {
     "node": ">=18"
