@@ -1,14 +1,18 @@
 FROM node:20-alpine
 
+# Dépendances pour better-sqlite3 (compilation native)
+RUN apk add --no-cache python3 make g++ curl
+
 WORKDIR /app
 
-# Copie des fichiers
 COPY package.json ./
+RUN npm install --production
+
 COPY server.js ./
 COPY public/ ./public/
 
-# Pas de npm install — aucune dépendance externe
-# Node.js natif uniquement
+# Dossier persistant pour la BDD SQLite
+RUN mkdir -p /data
 
 EXPOSE 3000
 
