@@ -561,7 +561,7 @@ function onClientSearch() {
 
 async function doClientSearch(q) {
   document.getElementById('clientSpinner').style.display = 'block';
-  const { data } = await api('GET', '/api/admin/search?q='+encodeURIComponent(q));
+  const { data } = await api('GET', '/api/search?q='+encodeURIComponent(q));
   document.getElementById('clientSpinner').style.display = 'none';
   const el = document.getElementById('clientSearchResults');
   el.style.display = 'block';
