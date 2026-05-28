@@ -54,16 +54,20 @@ const server = http.createServer((req, res) => {
     const targetPath = req.url; // conserve query string
     console.log(`[PROXY] ${req.method} https://axonaut.com${targetPath}`);
 
+    // Transmettre le header "page" si présent (pagination Axonaut)
+    const fwdHeaders = {
+      'userApiKey':   API_KEY,
+      'Content-Type': 'application/json',
+      'Accept':       'application/json',
+    };
+    if (req.headers['page']) fwdHeaders['page'] = req.headers['page'];
+
     const proxyReq = https.request({
       hostname: 'axonaut.com',
       port: 443,
       path: targetPath,
       method: req.method,
-      headers: {
-        'userApiKey':   API_KEY,
-        'Content-Type': 'application/json',
-        'Accept':       'application/json',
-      }
+      headers: fwdHeaders,
     }, (proxyRes) => {
       res.writeHead(proxyRes.statusCode, {
         'Content-Type':                'application/json',
