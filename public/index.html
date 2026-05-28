@@ -202,6 +202,28 @@ table.tix tr:hover td{background:rgba(255,255,255,.025);color:#fff}
 .tab.active{color:var(--green);border-bottom-color:var(--green)}
 .tab-content{display:none}
 .tab-content.active{display:block}
+/* RENEW */
+.btn-renew.best-value{border-color:rgba(60,230,95,.5);background:rgba(60,230,95,.08);position:relative}
+.btn-renew.best-value:hover{background:rgba(60,230,95,.18)}
+.best-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;font-family:'Raleway',sans-serif;font-weight:700;font-size:.6rem;padding:.15rem .5rem;border-radius:3px;white-space:nowrap;letter-spacing:.04em;text-transform:uppercase}
+.renew-hint{font-family:'Roboto Condensed',sans-serif;font-size:.72rem;color:var(--muted);margin-top:.75rem;text-align:center}
+/* NO CONTRACT PAGE */
+.no-contract{background:var(--bleu2);border:1px solid var(--border);border-radius:16px;padding:2.5rem;max-width:680px;margin:2rem auto;text-align:center}
+.no-contract-icon{font-size:3rem;margin-bottom:1rem}
+.no-contract h2{font-family:'Raleway',sans-serif;font-weight:800;font-size:1.6rem;margin-bottom:.75rem;letter-spacing:-.02em}
+.no-contract h2 em{font-style:normal;color:var(--green)}
+.no-contract p{font-family:'Roboto Condensed',sans-serif;color:var(--sub);font-size:.92rem;line-height:1.65;margin-bottom:1.75rem;max-width:500px;margin-left:auto;margin-right:auto}
+.offers-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem;margin-bottom:1.5rem}
+@media(max-width:500px){.offers-grid{grid-template-columns:1fr}}
+.offer-card{background:var(--bleu3);border:1px solid var(--border);border-radius:10px;padding:1.25rem 1rem;text-decoration:none;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:.3rem;position:relative}
+.offer-card:hover{border-color:rgba(60,230,95,.35);transform:translateY(-2px);background:rgba(60,230,95,.07)}
+.offer-card.featured{border-color:rgba(60,230,95,.4);background:rgba(60,230,95,.06)}
+.offer-card .o-hrs{font-family:'Raleway',sans-serif;font-weight:800;font-size:1.8rem;color:var(--green)}
+.offer-card .o-price{font-family:'Roboto Condensed',sans-serif;font-size:.82rem;color:#fff;font-weight:400}
+.offer-card .o-per-h{font-family:'Roboto Condensed',sans-serif;font-size:.72rem;color:var(--muted)}
+.offer-card .o-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;font-family:'Raleway',sans-serif;font-weight:700;font-size:.6rem;padding:.15rem .55rem;border-radius:3px;white-space:nowrap;text-transform:uppercase}
+.offer-desc{font-family:'Roboto Condensed',sans-serif;font-size:.78rem;color:var(--muted);line-height:1.55;margin-bottom:1.5rem}
+
 /* LOADING */
 .loading-block{display:flex;flex-direction:column;align-items:center;gap:1rem;padding:4rem;color:var(--sub)}
 .loading-step{font-family:'Roboto Condensed',sans-serif;font-size:.83rem;color:var(--muted)}
@@ -653,6 +675,42 @@ function renderDetail(d, containerId, isAdmin) {
   if (chartA){chartA.destroy();chartA=null;}
   if (chartB){chartB.destroy();chartB=null;}
 
+  // Client sans contrat EVO → page de motivation
+  if (!isAdmin && !(d.contracts||[]).length) {
+    const links = d.links || {};
+    document.getElementById(containerId).innerHTML = `
+      <button class="back-btn" onclick="showPage('pageClientSearch')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        Retour
+      </button>
+      <div class="no-contract">
+        <div class="no-contract-icon">⚡</div>
+        <h2>Passez à la vitesse <em>supérieure</em></h2>
+        <p>Votre site web mérite une attention régulière. Avec un crédit EVO, chaque demande est traitée à la minute près — modifications, graphisme, maintenance WordPress — sans abonnement rigide, sans date d'expiration.</p>
+        <div class="offers-grid">
+          <a class="offer-card" href="${links['2h']||'#'}" target="_blank">
+            <span class="o-hrs">2h</span>
+            <span class="o-price">250€ HT</span>
+            <span class="o-per-h">125€ / heure</span>
+          </a>
+          <a class="offer-card" href="${links['4h']||'#'}" target="_blank">
+            <span class="o-hrs">4h</span>
+            <span class="o-price">480€ HT</span>
+            <span class="o-per-h">120€ / heure</span>
+          </a>
+          <a class="offer-card featured" href="${links['10h']||'#'}" target="_blank">
+            <span class="o-badge">Meilleure valeur</span>
+            <span class="o-hrs">10h</span>
+            <span class="o-price">1 100€ HT</span>
+            <span class="o-per-h">110€ / heure</span>
+          </a>
+        </div>
+        <p class="offer-desc">Temps décompté à la minute · Valable sur tous nos services · Sans date de péremption<br>Graphisme · Développement · WordPress · Vidéo · Conseil</p>
+        <a class="btn-primary" style="max-width:300px;display:inline-block;text-decoration:none" href="${links['10h']||links['4h']||links['2h']||'#'}" target="_blank">Souscrire un crédit EVO →</a>
+      </div>`;
+    return;
+  }
+
   const co = d.company || {};
   const rc = d.remH < 1 ? 'var(--crit)' : d.remH < 2 ? 'var(--warn)' : 'var(--green)';
   const pc = d.pct >= 100 ? 'var(--crit)' : d.pct >= 80 ? 'var(--warn)' : 'var(--green)';
@@ -660,16 +718,20 @@ function renderDetail(d, containerId, isAdmin) {
   const evoBadges = (d.evoPrj||[]).map(p=>'<span class="proj-badge badge-evo">'+p.name+'</span>').join('');
   const asBadges  = (d.assistPrj||[]).map(p=>'<span class="proj-badge badge-assist">'+p.name+'</span>').join('');
 
-  // Contrats
-  const contratsHTML = !(d.contracts||[]).length
-    ? '<div class="empty-state">Aucun contrat EVO facturé</div>'
-    : d.contracts.map(c=>`
+  // Contrats — admin voit tout, client voit seulement le contrat actif
+  const contratsToShow = isAdmin
+    ? (d.contracts||[])
+    : (activeContract ? [activeContract] : []);
+
+  const contratsHTML = !contratsToShow.length
+    ? '<div class="empty-state">Aucun contrat EVO actif</div>'
+    : contratsToShow.map(c=>`
       <div class="ctr">
         <div class="ctr-top">
           <span class="ctr-name">${c.label}</span>
           <span class="ctr-hrs">${c.hours}h<small>achetées</small></span>
         </div>
-        <div class="ctr-meta">Facture ${c.invoice_num} · ${fmtDate(c.invoice_date)} · qté ${c.qty}</div>
+        <div class="ctr-meta">${isAdmin ? 'Facture '+c.invoice_num+' · ' : ''}${fmtDate(c.invoice_date)}${isAdmin ? ' · qté '+c.qty : ''}</div>
       </div>`).join('');
 
   // Mini liste EVO
@@ -687,15 +749,50 @@ function renderDetail(d, containerId, isAdmin) {
 
   // Boutons renouvellement (client uniquement)
   const links = d.links || {};
+
+  // Contrat actif côté client : uniquement le plus récent avec du solde restant
+  const activeContract = !isAdmin && (d.contracts||[]).length > 0
+    ? [...(d.contracts||[])].reverse().find(c => c.hours > 0) || (d.contracts||[]).slice(-1)[0]
+    : null;
+
   const renewHTML = !isAdmin && (links['2h']||links['4h']||links['10h']) ? `
     <div class="renew-section">
-      <div class="renew-lbl">Renouveler votre contrat</div>
+      <div class="renew-lbl">Renouveler ou souscrire un crédit EVO</div>
       <div class="renew-btns">
         ${links['2h']?`<a class="btn-renew" href="${links['2h']}" target="_blank"><span class="hrs">2h</span><span class="lbl">250€ HT</span></a>`:''}
         ${links['4h']?`<a class="btn-renew" href="${links['4h']}" target="_blank"><span class="hrs">4h</span><span class="lbl">480€ HT</span></a>`:''}
-        ${links['10h']?`<a class="btn-renew" href="${links['10h']}" target="_blank"><span class="hrs">10h</span><span class="lbl">1100€ HT</span></a>`:''}
+        ${links['10h']?`<a class="btn-renew best-value" href="${links['10h']}" target="_blank"><span class="best-tag">Meilleure valeur</span><span class="hrs">10h</span><span class="lbl">1 100€ HT</span></a>`:''}
       </div>
+      <div class="renew-hint">Plus le crédit est important, plus le tarif horaire est avantageux.</div>
     </div>` : '';
+
+  // Contrats épuisés (admin uniquement) — ceux dont le solde est 0
+  // Calcul FIFO : on déduit les heures consommées des contrats du plus ancien au plus récent
+  let remainingUsed = parseFloat(d.usedH || 0);
+  const exhaustedContracts = [];
+  const activeContracts = [];
+  if (isAdmin) {
+    for (const c of (d.contracts||[])) {
+      const h = parseFloat(c.hours || 0);
+      if (remainingUsed >= h) {
+        exhaustedContracts.push(c);
+        remainingUsed -= h;
+      } else {
+        activeContracts.push(c);
+      }
+    }
+  }
+
+  const exhaustedHTML = isAdmin && exhaustedContracts.length
+    ? exhaustedContracts.map(c=>`
+      <div class="ctr" style="opacity:.55">
+        <div class="ctr-top">
+          <span class="ctr-name">${c.label}</span>
+          <span class="ctr-hrs" style="color:var(--crit)">${c.hours}h<small>épuisées</small></span>
+        </div>
+        <div class="ctr-meta">Facture ${c.invoice_num} · ${fmtDate(c.invoice_date)}</div>
+      </div>`).join('')
+    : '';
 
   // Stocker tickets pour tri/filtre
   allTicketsData = d.tickets || [];
@@ -766,6 +863,14 @@ function renderDetail(d, containerId, isAdmin) {
         <div class="panel">
           <div class="panel-title"><span class="dot"></span>Contrats EVO achetés</div>
           <div class="contracts-list">${contratsHTML}</div>
+          ${isAdmin && exhaustedHTML ? `
+          <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+            <div style="font-family:Roboto Condensed,sans-serif;font-size:.68rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem;display:flex;align-items:center;gap:.4rem">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--crit);display:inline-block;flex-shrink:0"></span>
+              Contrats épuisés (${exhaustedContracts.length})
+            </div>
+            <div class="contracts-list">${exhaustedHTML}</div>
+          </div>` : ''}
         </div>
         <div class="panel">
           <div class="panel-title"><span class="dot"></span>Solde EVO</div>
