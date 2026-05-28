@@ -573,8 +573,29 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ...data, links: LINKS });
   }
 
+  // GET /api/search?q= — recherche publique pour interface client
+  if (method === 'GET' && url === '/api/search') {
+    const q = (query.q || '').trim();
+    if (!q) return json(res, 200, []);
+    try {
+      const { status, body } = await axoGet('/api/v2/companies?search=' + encodeURIComponent(q), 1);
+      if (status === 200 && Array.isArray(body)) {
+        const results = body.slice(0, 10).map(c => ({
+          id: c.id, name: c.name || '', city: c.address_city || ''
+          // Pas d'email exposé côté client public
+        }));
+        return json(res, 200, results);
+      }
+    } catch(e) {}
+    // Fallback SQLite
+    const results = db.prepare("SELECT id,name,city FROM companies WHERE lower(name) LIKE ? LIMIT 10")
+      .all(`%${q.toLowerCase()}%`);
+    return json(res, 200, results);
+  }
+
   // GET /api/admin/search?q= — recherche client (Axonaut direct + SQLite fallback)
   if (method === 'GET' && url === '/api/admin/search') {
+    if (!checkAdminSession(req)) return json(res, 401, { error: 'Non authentifié' });
     const q = (query.q || '').trim();
     if (!q) return json(res, 200, []);
 
