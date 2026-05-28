@@ -164,15 +164,18 @@ async function axoAll(path) {
 
 // ── SYNC AXONAUT → SQLITE ────────────────────────────────
 let syncRunning = false;
+let syncProgress = { step: '', pct: 0, total: 0, done: 0 };
 
 async function syncAll() {
   if (syncRunning) return { ok: false, message: 'Sync déjà en cours' };
   syncRunning = true;
+  syncProgress = { step: 'Démarrage…', pct: 0, total: 0, done: 0 };
   const started = Math.floor(Date.now() / 1000);
   console.log('[SYNC] Démarrage sync Axonaut…');
 
   try {
     // 1. Entreprises
+    syncProgress = { step: 'Chargement des clients…', pct: 5, total: 0, done: 0 };
     console.log('[SYNC] Chargement entreprises…');
     const companies = await axoAll('/api/v2/companies');
     const upsertCo = db.prepare(`
@@ -187,6 +190,7 @@ async function syncAll() {
       }
     });
     insertAllCo(companies);
+    syncProgress = { step: 'Chargement des projets…', pct: 20, total: 0, done: 0 };
     console.log(`[SYNC] ${companies.length} entreprises`);
 
     // 2. Projets
@@ -204,6 +208,7 @@ async function syncAll() {
       }
     });
     insertAllPrj(projects);
+    syncProgress = { step: 'Chargement des factures…', pct: 35, total: 0, done: 0 };
     console.log(`[SYNC] ${projects.length} projets`);
 
     // 3. Factures → contrats EVO
@@ -234,6 +239,7 @@ async function syncAll() {
       }
     });
     insertAllCtr(invoices);
+    syncProgress = { step: 'Chargement des tickets…', pct: 50, total: 0, done: 0 };
     console.log(`[SYNC] Contrats EVO extraits`);
 
     // 4. Tickets + timetrackings
@@ -250,6 +256,7 @@ async function syncAll() {
     }
 
     const relTickets = tickets.filter(t => t.project_id && evoProjects.has(t.project_id));
+    syncProgress = { step: 'Chargement des temps passés…', pct: 60, total: relTickets.length, done: 0 };
     console.log(`[SYNC] ${relTickets.length} tickets EVO/Assistance à synchroniser`);
 
     // Timetrackings par batch de 10
@@ -278,13 +285,21 @@ async function syncAll() {
           console.error('[SYNC] Erreur ticket', t.id, e.message);
         }
       }));
-      if (i % 50 === 0) console.log(`[SYNC] Tickets : ${Math.min(i+10, relTickets.length)}/${relTickets.length}`);
+      const doneSoFar = Math.min(i+10, relTickets.length);
+      syncProgress = {
+        step: `Temps passés… (${doneSoFar}/${relTickets.length} tickets)`,
+        pct: Math.round(60 + (doneSoFar / relTickets.length) * 35),
+        total: relTickets.length,
+        done: doneSoFar
+      };
+      if (i % 50 === 0) console.log(`[SYNC] Tickets : ${doneSoFar}/${relTickets.length}`);
     }
 
     const finished = Math.floor(Date.now() / 1000);
     db.prepare('INSERT INTO sync_log (started_at, finished_at, status, message) VALUES (?,?,?,?)')
       .run(started, finished, 'ok', `${companies.length} clients, ${relTickets.length} tickets`);
 
+    syncProgress = { step: 'Synchronisation terminée', pct: 100, total: relTickets.length, done: relTickets.length };
     syncRunning = false;
     console.log('[SYNC] Terminé ✅');
     return { ok: true, message: 'Sync terminée' };
@@ -660,7 +675,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     alerts.sort((a, b) => b.pct - a.pct);
-    return json(res, 200, alerts);
+    return json(res, 200, { alerts, fromDB: true, total: companies.length });
   }
 
   // GET /api/admin/logs — logs connexions clients
@@ -668,6 +683,12 @@ const server = http.createServer(async (req, res) => {
     if (!checkAdminSession(req)) return json(res, 401, { error: 'Non authentifié' });
     const logs = db.prepare('SELECT * FROM client_logs ORDER BY logged_at DESC LIMIT 100').all();
     return json(res, 200, logs);
+  }
+
+  // GET /api/admin/sync-progress — progression temps réel
+  if (method === 'GET' && url === '/api/admin/sync-progress') {
+    if (!checkAdminSession(req)) return json(res, 401, { error: 'Non authentifié' });
+    return json(res, 200, { running: syncRunning, ...syncProgress });
   }
 
   // GET /api/admin/sync-status
